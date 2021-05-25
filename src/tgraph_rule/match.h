@@ -189,12 +189,14 @@ class Match {
         auto t_end = std::chrono::steady_clock::now();
         if (std::chrono::duration<double>(t_end - t_begin).count() >
             MAX_MATCH_TIME) {
+          LOG_S("break in advance A");
           break;
         }
       }
       auto t_end = std::chrono::steady_clock::now();
       if (std::chrono::duration<double>(t_end - t_begin).count() >
           MAX_MATCH_TIME) {
+        LOG_S("break in advance B");
         break;
       }
     }

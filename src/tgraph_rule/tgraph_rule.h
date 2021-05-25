@@ -44,7 +44,7 @@ class TGraphRule {
   }
 
   void LoadTGRs(Config &config) {
-    LOG_S("Load TGR Strat");
+    LOG_S("Load TGR Start");
     auto t_begin = std::chrono::steady_clock::now();
     auto pattern_path_vec = config.PatternFilePathVec();
     auto x_literal_path_vec = config.XLiteralFilePathVec();
@@ -85,7 +85,7 @@ class TGraphRule {
         std::string str;
         std::vector<std::string> str_list;
         while (getline(ss, str, ',')) str_list.emplace_back(str);
-        link_.id_ = 1;
+        link_.id_ = 0;
         link_.from_ = stol(str_list[1]);
         link_.to_ = stol(str_list[3]);
         link_.label_ = stol(str_list[5]);
@@ -96,6 +96,7 @@ class TGraphRule {
         link_.has_order_ = link_.order_ > 0;
       }
       infile.close();
+      // LOG_S("total edges in RHS: ", cnt - 1);
     } catch (std::exception &e) {
       LOG_E("Load TGR YLiteralFile Error: ", e.what());
       throw(TException::LoadPatternError);
@@ -152,8 +153,11 @@ class TGraphRule {
         TIME_T order = stol(str_list[4]);
         auto edge_pair = query.AddEdge(from, to, label, eid);
         edge_pair.first->AddAttribute(TIME_KEY, static_cast<TIME_T>(order));
+        // LOG_S("\tgot edge from-", from);
+        // LOG_S("\tgot edge to-", to);
       }
       infile.close();
+      // LOG_S("total edges in LHS: ", cnt - 1);
     } catch (std::exception &e) {
       LOG_E("Load TGR EFile Error: ", e.what());
       throw(TException::LoadPatternError);

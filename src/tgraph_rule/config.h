@@ -45,7 +45,7 @@ class Config {
       thread_num_ = config["Settings"]["ThreadNum"].as<uint32_t>();
     } catch (YAML::BadFile &e) {
       LOG_E("Load Discovery Configurations Error: ", e.what());
-      throw(TException::ConfigError);
+      throw (TException::ConfigError);
     }
   }
 
@@ -71,6 +71,7 @@ class Config {
       use_match_filter_ = false;
       // TGR settings
       for (auto it = config["TGR"].begin(); it != config["TGR"].end(); it++) {
+        const std::string name = (*it)["Name"].as<std::string>();
         const std::string dir = (*it)["Dir"].as<std::string>();
         const std::string vfile = (*it)["VertexFile"].as<std::string>();
         const std::string efile = (*it)["EdgeFile"].as<std::string>();
@@ -79,15 +80,16 @@ class Config {
         pattern_path_vec_.push_back({dir + vfile, dir + efile});
         x_literal_.push_back(dir + x_literal);
         y_literal_.push_back(dir + y_literal);
+        ptn_names_.push_back(name);
         const std::string::size_type pos = vfile.rfind(V_FILE_SUFFIX);
         const std::string match_path =
-            pos != vfile.npos ? vfile.substr(0, pos) + MATCH_FILE_SUFFIX
-                              : vfile + MATCH_FILE_SUFFIX;
+          pos != vfile.npos ? vfile.substr(0, pos) + MATCH_FILE_SUFFIX
+          : vfile + MATCH_FILE_SUFFIX;
         match_path_vec_.push_back(output_path_ + match_path);
       }
     } catch (YAML::BadFile &e) {
       LOG_E("Load Apply Configurations Error: ", e.what());
-      throw(TException::ConfigError);
+      throw (TException::ConfigError);
     }
   }
 
@@ -104,14 +106,34 @@ class Config {
       bool use_partition = config["UsePartition"].as<bool>();
       if (use_partition) {
         partition_method_ = time_window_number_ > 0
-                                ? PARTITION_BY_TIME_WINDOW_NUMBER
-                                : PARTITION_BY_TIME_WINDOW_SIZE;
+                            ? PARTITION_BY_TIME_WINDOW_NUMBER
+                            : PARTITION_BY_TIME_WINDOW_SIZE;
       }
     } catch (YAML::BadFile &e) {
       LOG_E("Load Time Window Configurations Error: ", e.what());
-      throw(TException::ConfigError);
+      throw (TException::ConfigError);
     }
   }
+
+  /* For Test, Print Conf Info */
+  void PrintConfX(const std::vector<std::pair<GRADE_T, GRADE_T>> &confs) {
+    LOG("Format: pattern name : (Supp Q, Supp R, Precision");
+    uint ofst = 0;
+    for (const auto &co : confs) {
+      GRADE_T supp_q = co.first;
+      GRADE_T supp_r = co.second;
+      // LOG("Supp Q: ", supp_q);
+      // LOG("Supp R: ", supp_r);
+      // GRADE_T conf = (supp_r * 1.0) / supp_q;
+      // LOG("Percision: ", conf);
+      GRADE_T conf = (supp_r * 1.0) / supp_q;
+      std::string out_str = ptn_names_[ofst] + ": (" + std::to_string(supp_q) + ", \t" + std::to_string(supp_r) +
+                            ", \t" + std::to_string(conf) + ")";
+      LOG(out_str);
+      ofst++;
+    }
+  }
+
 
   /* Print Config Info */
   void PrintConfig() const {
@@ -155,7 +177,7 @@ class Config {
   inline std::string GraphVFilePath() const { return graph_path_.first; }
   inline std::string GraphEFilePath() const { return graph_path_.second; }
   inline std::vector<std::pair<std::string, std::string>> PatternFilePathVec()
-      const {
+  const {
     return pattern_path_vec_;
   }
   inline std::vector<std::string> XLiteralFilePathVec() const {
@@ -192,6 +214,7 @@ class Config {
   APP_TYPE app_;
   std::pair<std::string, std::string> graph_path_;
   std::vector<std::pair<std::string, std::string>> pattern_path_vec_;
+  std::vector<std::string> ptn_names_;
   std::vector<std::string> x_literal_;
   std::vector<std::string> y_literal_;
   std::vector<std::string> match_path_vec_;

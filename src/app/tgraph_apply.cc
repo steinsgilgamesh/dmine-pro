@@ -188,7 +188,8 @@ void app_apply(Config &config, bool cal_percision = false) {
         confs[i].first = tag_map[TAG_SUPP_Q].size();
         confs[i].second = tag_map[TAG_SUPP_R].size();
       }
-      PrintConf(confs);
+      // PrintConf(confs);
+      config.PrintConfX(confs);
     } else {
       for (int i = 0; i < tgr_size; i++) {
         auto &tag_map = assemble_rlt[i];
@@ -222,8 +223,8 @@ int main(int argc, char **argv) {
   config.PrintConfig();
 
   // run app
-  // app_apply(config, true);
-  app_apply(config);
+  app_apply(config, true);
+  // app_apply(config);
 
   FinalizeMPIComm();
 }

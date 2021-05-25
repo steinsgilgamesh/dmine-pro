@@ -1040,7 +1040,7 @@ inline void FilterGPARUsingSuppRLimit(GPARList& gpar_list,
   GPARList filter_gpar_list;
   using SuppContainerType = std::set<typename DataGraph::VertexConstPtr>;
   int index = 0;
-#pragma omp parallel for schedule(static, MAX_THREAD_NUM)
+// #pragma omp parallel for schedule(static, MAX_THREAD_NUM)
   for (auto& gpar : gpar_list) {
     CalSuppQ(gpar, data_graph);
     gpar.supp_Q_size_ = gpar.supp_Q_size();

@@ -1,7 +1,8 @@
 ﻿
 #aux_source_directory(. DIR_LIB_SRCS)
 # 生成链接库
-set(RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin/test)
+#set(RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin/test)
+set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin/test)
 
 add_executable(test_garchase  test_garchase.cpp)
 add_executable(test_garmatch  test_garmatch.cpp)

@@ -37,7 +37,7 @@ find_package(OpenMP)
 if(OPENMP_FOUND)
   message("OpenMP FOUND")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}" )
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
@@ -59,7 +59,7 @@ if(MPI_FOUND)
   message("mpi FOUND")
 endif()
 
-include_directories(${PROJECT_SOURCE_DIR}/include/gundam/include)
+include_directories(${PROJECT_SOURCE_DIR}/include/GUNDAM/include)
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 add_subdirectory(src)

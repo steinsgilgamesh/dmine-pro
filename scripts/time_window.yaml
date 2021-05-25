@@ -1,0 +1,3 @@
+TimeWindowNumber: 12
+TimeWindowSize: 30
+UsePartition: true

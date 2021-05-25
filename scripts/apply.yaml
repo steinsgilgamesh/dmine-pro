@@ -1,0 +1,23 @@
+Graph:
+  Name: icews14
+  Dir: /home/xuruiqi/Project/dmine-pro/build/icews14/
+  VertexFile: icews2014.v.csv
+  EdgeFile: icews2014.e.csv
+
+TGR:
+# - Name: 97_4
+#   Dir: /home/xuruiqi/Project/dmine-pro/build/patterns/
+#   VertexFile: node-4.v.csv
+#   EdgeFile: 97_4.lhs.csv
+#   LiteralX: empty.csv
+#   LiteralY: 97_4.rhs.csv
+- Name: 94_4
+  Dir: /home/xuruiqi/Project/dmine-pro/build/patterns/
+  VertexFile: node-3.v.csv
+  EdgeFile: 94_4.lhs.csv
+  LiteralX: empty.csv
+  LiteralY: 94_4.rhs.csv
+
+OutputGraph:
+  Name: tgr_matches
+  Dir: /home/xuruiqi/Project/dmine-pro/build/matches/
