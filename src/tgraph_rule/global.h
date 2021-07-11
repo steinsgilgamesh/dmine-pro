@@ -289,6 +289,7 @@ void GetIntersection(std::list<T> &inter, TimeQueue pri_queue) {
 }
 
 void RemoveLink(Q &query, const LinkBase &link) {
+  // LOG_S("removing edge with id = ", link.id_);
   query.EraseEdge(link.id_);
   /*auto vertex_ptr = query.FindConstVertex(link.to_);
   if (vertex_ptr) {

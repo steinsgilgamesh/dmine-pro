@@ -37,19 +37,29 @@ void write_match(std::string output_path, const MatchResult &match_rlt) {
   }
 }
 
-void write_matchX(
-  const TGraph &tg, const Pattern &pattern,
-  std::string output_path, const MatchResult &match_rlt,
-  Config &config) {
-  if (match_rlt.empty()) return;
-  std::ofstream outfile;
-  outfile.open(output_path.data());
-  auto &match = match_rlt[0];
-  outfile << "match_id";
-  for (auto iter : match) {
-    outfile << "," << iter.first->id();
-  }
-}
+// void write_matchX(
+//   const TGraph &tg, const Pattern &pattern,
+//   std::string output_path, const MatchResult &match_rlt,
+//   Config &config) {
+//   if (match_rlt.empty()) return;
+//   std::ofstream outfile;
+//   outfile.open(output_path.data());
+//   auto &match = match_rlt[0];
+//   uint match_size = 0;
+//   for (auto iter : match) { match_size++; }
+//   std::vector<VertexIDType> vid_q2g(match_size);
+//   LOG_S("writing output with format of (match_id, src, elabel, dst, time)");
+//   uint64_t cnt = 1;
+//   auto link = tg_rule.GetLink();
+//   auto src = link.from;
+//   auto dst = link.to;
+//   for (auto &match : match_rlt) {
+//     for (auto iter : match) {
+//       vid_q2g[iter.first->id()] = iter.second->id();
+//     }
+    
+//   }
+// }
 
 
 void app_apply(Config &config, bool cal_percision = false) {
@@ -110,6 +120,7 @@ void app_apply(Config &config, bool cal_percision = false) {
   auto &tg_rules = tg_rule.GetTGRSet();
   auto match_path = config.MatchFilePathVec();
   for (int i = 0; i < tgr_size; i++) {
+    // PrintLink(link);
     LOG_S("Apply in TGR ", i + 1);
     auto &rule = tg_rules[i];
     if (worker_id_ != COORDINATOR) {
@@ -119,7 +130,7 @@ void app_apply(Config &config, bool cal_percision = false) {
     if (cal_percision) {
       MatchResult match_rlt;
       const auto &x_ptr = rule.FindConstVertex(link.from_);
-      // PrintTGR(rule);
+      PrintTGR(rule);
 #ifdef ENABLE_OPENMP
       m_ptr->DoMatchWithXParallel(tg, rule, match_rlt);
 #else // ENABLE_OPENMP

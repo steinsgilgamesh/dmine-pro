@@ -44,7 +44,7 @@ class TGraphRule {
   }
 
   void LoadTGRs(Config &config) {
-    LOG_S("Load TGR Start");
+    LOG_S("Load TGRs Start");
     auto t_begin = std::chrono::steady_clock::now();
     auto pattern_path_vec = config.PatternFilePathVec();
     auto x_literal_path_vec = config.XLiteralFilePathVec();
@@ -57,7 +57,7 @@ class TGraphRule {
                           pattern_path_vec[i].second);
     }
     auto t_end = std::chrono::steady_clock::now();
-    LOG_S("Load TGR Success, Time: ",
+    LOG_S("Load TGRs Success, Time: ",
           std::chrono::duration<double>(t_end - t_begin).count());
   }
 
