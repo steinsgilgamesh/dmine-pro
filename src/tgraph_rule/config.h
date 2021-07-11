@@ -117,7 +117,7 @@ class Config {
 
   /* For Test, Print Conf Info */
   void PrintConfX(const std::vector<std::pair<GRADE_T, GRADE_T>> &confs) {
-    LOG("Format: pattern name : (Supp Q, Supp R, Precision");
+    LOG("Format: pattern name : (Supp Q, Supp R, Precision)");
     uint ofst = 0;
     for (const auto &co : confs) {
       GRADE_T supp_q = co.first;

@@ -8,6 +8,8 @@
 
 using namespace toy;
 
+#define ENABLE_OPENMP
+
 int worker_id_, worker_num_;
 const int COORDINATOR = 0;
 const int TAG_NUM = 2;
@@ -34,6 +36,21 @@ void write_match(std::string output_path, const MatchResult &match_rlt) {
     outfile << "\n";
   }
 }
+
+void write_matchX(
+  const TGraph &tg, const Pattern &pattern,
+  std::string output_path, const MatchResult &match_rlt,
+  Config &config) {
+  if (match_rlt.empty()) return;
+  std::ofstream outfile;
+  outfile.open(output_path.data());
+  auto &match = match_rlt[0];
+  outfile << "match_id";
+  for (auto iter : match) {
+    outfile << "," << iter.first->id();
+  }
+}
+
 
 void app_apply(Config &config, bool cal_percision = false) {
   // partition graph by time window
@@ -103,7 +120,11 @@ void app_apply(Config &config, bool cal_percision = false) {
       MatchResult match_rlt;
       const auto &x_ptr = rule.FindConstVertex(link.from_);
       // PrintTGR(rule);
+#ifdef ENABLE_OPENMP
+      m_ptr->DoMatchWithXParallel(tg, rule, match_rlt);
+#else // ENABLE_OPENMP
       m_ptr->DoMatchWithX(tg, rule, match_rlt);
+#endif // ENABLE_OPENMP
       // set msg
       if (worker_id_ == COORDINATOR) {
         std::unordered_set<VID_T> tmp_set;
@@ -127,7 +148,11 @@ void app_apply(Config &config, bool cal_percision = false) {
       MatchResult match_rlt;
       const auto &x_ptr = query.FindConstVertex(link.from_);
       // PrintTGR(query);
+#ifdef ENABLE_OPENMP
+      m_ptr->DoMatchWithXParallel(tg, query, match_rlt);
+#else // ENABLE_OPENMP
       m_ptr->DoMatchWithX(tg, query, match_rlt);
+#endif // ENABLE_OPENMP
       // set msg
       if (worker_id_ == COORDINATOR) {
         std::unordered_set<VID_T> tmp_set;
@@ -213,6 +238,8 @@ int main(int argc, char **argv) {
   GetMPIInfo(worker_id_, worker_num_);
   // init log level
   set_log_grade(LOG_T_GRADE);
+
+  LOG_S("number of workers: ", worker_num_);
 
   // init config
   Config config;

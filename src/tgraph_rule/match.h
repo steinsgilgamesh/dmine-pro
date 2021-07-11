@@ -3,6 +3,7 @@
 
 #include "global.h"
 #include "tgraph.h"
+#include <omp.h>
 
 namespace toy {
 /* Match order algorithm
@@ -50,7 +51,7 @@ static bool OrderMatchAlgorithm(const MatchMap &match_map) {
           auto &target_src_vertex_id = target_vertex_list[i]->id();
           auto &target_dst_vertex_id = target_vertex_list[j]->id();
           for (auto target_edge_iter = target_vertex_list[i]->OutEdgeCBegin(
-                   edge_label, target_vertex_list[j]);
+                                         edge_label, target_vertex_list[j]);
                !target_edge_iter.IsDone(); target_edge_iter++) {
             auto attribute_ptr = target_edge_iter->FindAttributePtr(TIME_KEY);
             ATTRIBUTE_PTR_CHECK(attribute_ptr);
@@ -151,7 +152,7 @@ class Match {
   */
   void DoMatchWithX(const TGraph &tg, const Pattern &pattern,
                     MatchResult &match_result) {  // NOTE: setX must be called
-                                                  // once before this function
+    // once before this function
     // LOG_S("Match Start");
     CandidateSetContainer candidate_set, candidate_set_tmp;
     MatchMap match_state;
@@ -159,10 +160,11 @@ class Match {
     auto target_set = x_hash_set_;
     // do match in a graph of stream
     auto t_begin = std::chrono::steady_clock::now();
+    LOG_S("TGraph.Size()", tg.Size());
     for (TGraph::const_iterator iter = tg.CBegin(); iter != tg.CEnd(); iter++) {
       candidate_set.clear();
       _dp_iso::InitCandidateSet<MatchSemantics::kIsomorphism>(pattern, *iter,
-                                                              candidate_set);
+          candidate_set);
       // std::cout << "T1\n";
       //_dp_iso::RefineCandidateSet(pattern, *iter, candidate_set);
       // std::cout << "T2\n";
@@ -181,7 +183,10 @@ class Match {
         size_t size_af = match_result.size();
         // std::cout << size_af << "\n";
         if (size_af > size_bf) {
+          // LOG_S("WTF?????");
+          // LOG_S("current pointing to:", (*id_iter));
           target_set.erase(id_iter++);
+          // LOG_S("updated pointing to:", (*(id_iter)));
         } else {
           id_iter++;
         }
@@ -201,6 +206,87 @@ class Match {
       }
     }
   }
+
+
+  /* Do match with x in pattern using openMP
+  * @param: tgraph, pattern, match result
+  * @desc: only calculate match of pattern with x once in t-graph
+  */
+  void DoMatchWithXParallel(const TGraph &tg, const Pattern &pattern,
+                            MatchResult &match_result) {  // NOTE: setX must be called
+    // once before this function
+    // LOG_S("Match Start");
+    CandidateSetContainer candidate_set;
+
+    const auto &x_ptr = pattern.FindConstVertex(x_id_);
+    std::vector<VID_T> target_vec;
+    for (auto elem : x_hash_set_) { target_vec.emplace_back(elem); }
+    // auto target_set = x_hash_set_;
+    // do match in a graph of stream
+    auto t_begin = std::chrono::steady_clock::now();
+    LOG_S("TGraph.Size()", tg.Size());
+    for (TGraph::const_iterator iter = tg.CBegin(); iter != tg.CEnd(); iter++) {
+      candidate_set.clear();
+      _dp_iso::InitCandidateSet<MatchSemantics::kIsomorphism>(pattern, *iter,
+          candidate_set);
+      if (candidate_set[x_ptr].empty()) continue;
+      candidate_set[x_ptr].clear();
+      candidate_set[x_ptr].shrink_to_fit();
+      // do match for each x candidate
+
+      #pragma omp parallel
+      {
+        MatchResult partial_result;
+        MatchMap match_state;
+        CandidateSetContainer candidate_set_tmp;
+        bool to_continue = false;
+
+        #pragma omp for
+        // for (auto id_iter = target_set.begin(); id_iter != target_set.end();) {
+        for (uint ofst = 0; ofst < target_vec.size(); ofst++) {
+          if (to_continue) { continue; }
+          match_state.clear();
+          match_state[x_ptr] = iter->FindConstVertex(target_vec[ofst]);
+          candidate_set_tmp = candidate_set;
+          size_t size_bf = partial_result.size();
+          // std::cout << size_bf << "\n";
+          matchX(*iter, pattern, partial_result, candidate_set_tmp, match_state);
+          // match(*iter, pattern, match_result);
+          size_t size_af = partial_result.size();
+          // std::cout << size_af << "\n";
+          ofst++;
+          // if (size_af > size_bf) {
+          //   // target_set.erase(ofst++);
+          // } else {
+          //   ofst++;
+          // }
+          // time stop
+          auto t_end = std::chrono::steady_clock::now();
+          if (std::chrono::duration<double>(t_end - t_begin).count() >
+              MAX_MATCH_TIME) {
+            LOG_S("break in advance A");
+            // break;
+            to_continue = true;
+          }
+        } // #pragma omp for
+        
+        for (uint ofst = 0; ofst < partial_result.size(); ++ofst) {
+          #pragma omp critical
+          {
+            match_result.push_back(partial_result[ofst]);
+          }// #pragma omp critical
+        }
+        // #pragma omp for
+      } // #pragma omp parallel
+      auto t_end = std::chrono::steady_clock::now();
+      if (std::chrono::duration<double>(t_end - t_begin).count() >
+          MAX_MATCH_TIME) {
+        LOG_S("break in advance B");
+        break;
+      }
+    }
+  }
+
 
   /* Do match
    * @param: tgraph, pattern, match result
@@ -274,7 +360,7 @@ class MatchNoOrder : public Match {
   virtual void match(const DataGraph &data_graph, const Pattern &pattern,
                      MatchResult &match_result) {
     /* empty match callback */
-    auto match_callback = [&match_result](const MatchMap &match_map) {
+    auto match_callback = [&match_result](const MatchMap & match_map) {
       match_result.emplace_back(match_map);  // match
       return true;                           // continue match
     };
@@ -288,13 +374,13 @@ class MatchNoOrder : public Match {
                       CandidateSetContainer &candidates,
                       MatchMap &match_state) {
     /* empty match callback */
-    auto match_callback = [&match_result](const MatchMap &match_map) {
+    auto match_callback = [&match_result](const MatchMap & match_map) {
       match_result.emplace_back(match_map);  // match
       return false;                          // stop match
     };
 
     /* empty prune callback */
-    auto prune_callback = [](const MatchMap &match_state) { return false; };
+    auto prune_callback = [](const MatchMap & match_state) { return false; };
 
     DPISO<MatchSemantics::kIsomorphism>(pattern, data_graph, candidates,
                                         match_state, match_callback,
@@ -315,7 +401,7 @@ class MatchWithOrder : public Match {
   virtual void match(const DataGraph &data_graph, const Pattern &pattern,
                      MatchResult &match_result) {
     /* order match callback */
-    auto match_callback = [&match_result](const MatchMap &match_map) {
+    auto match_callback = [&match_result](const MatchMap & match_map) {
       if (OrderMatchAlgorithm(match_map)) {
         match_result.emplace_back(match_map);  // match
       }
@@ -331,7 +417,7 @@ class MatchWithOrder : public Match {
                       CandidateSetContainer &candidates,
                       MatchMap &match_state) {
     /* order match callback */
-    auto match_callback = [&match_result](const MatchMap &match_map) {
+    auto match_callback = [&match_result](const MatchMap & match_map) {
       if (OrderMatchAlgorithm(match_map)) {
         match_result.emplace_back(match_map);  // match
         return false;                          // stop match
@@ -340,7 +426,7 @@ class MatchWithOrder : public Match {
     };
 
     /* empty prune callback */
-    auto prune_callback = [](const MatchMap &match_state) { return false; };
+    auto prune_callback = [](const MatchMap & match_state) { return false; };
 
     DPISO<MatchSemantics::kIsomorphism>(pattern, data_graph, candidates,
                                         match_state, match_callback,
@@ -361,13 +447,13 @@ class MatchWithOrderFilter : public Match {
   virtual void match(const DataGraph &data_graph, const Pattern &pattern,
                      MatchResult &match_result) {
     /* empty match callback */
-    auto match_callback = [&match_result](const MatchMap &match_map) {
+    auto match_callback = [&match_result](const MatchMap & match_map) {
       match_result.emplace_back(match_map);  // match
       return true;                           // continue match
     };
 
     /* prune callback */
-    auto prune_callback = [](const MatchMap &match_state) {
+    auto prune_callback = [](const MatchMap & match_state) {
       if (OrderMatchAlgorithm(match_state)) {
         return false;
       }
@@ -375,7 +461,7 @@ class MatchWithOrderFilter : public Match {
     };
 
     /* empty candidates callback */
-    auto update_callback = [](CandidateSetContainer &candidate_set) {
+    auto update_callback = [](CandidateSetContainer & candidate_set) {
       return true;
     };
 
@@ -389,13 +475,13 @@ class MatchWithOrderFilter : public Match {
                       CandidateSetContainer &candidates,
                       MatchMap &match_state) {
     /* empty match callback */
-    auto match_callback = [&match_result](const MatchMap &match_map) {
+    auto match_callback = [&match_result](const MatchMap & match_map) {
       match_result.emplace_back(match_map);  // match
       return false;                          // stop match
     };
 
     /* prune callback */
-    auto prune_callback = [](const MatchMap &match_state) {
+    auto prune_callback = [](const MatchMap & match_state) {
       if (OrderMatchAlgorithm(match_state)) {
         return false;
       }
@@ -427,7 +513,7 @@ class MatchFactory {
     } else if (use_order && use_match_filter) {
       return std::make_shared<MatchWithOrderFilter>();
     } else {
-      throw("Not Support Match Method!");
+      throw ("Not Support Match Method!");
     }
   }
 };  // class MatchFactory
