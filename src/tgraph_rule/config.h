@@ -135,6 +135,14 @@ class Config {
   }
 
 
+  std::string GetPatternNameByOfst(const size_t ofst) {
+    if (ofst >= ptn_names_.size()) {
+      LOG_E("GetPatternNameByOfst() out of range!");
+    }
+    return ptn_names_[ofst];
+  }
+
+
   /* Print Config Info */
   void PrintConfig() const {
     LOG_T("...... Config Info ......");
