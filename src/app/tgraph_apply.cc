@@ -97,20 +97,20 @@ void write_matchX(
   for (auto iter : match) { match_size++; }
   std::vector<VID_T> vid_q2g(match_size);
   LOG_S("writing output with format of (match_id, src, elabel, dst, time) with pattern_name: ", pattern_name);
-  uint64_t cnt = 1;
+  // uint64_t cnt = 1;
   // auto link = tg_rule.GetLink();
   for (auto &match : match_rlt) {
     for (auto iter : match) {
       vid_q2g[iter.first->id()] = iter.second->id();
     }
-
+    uint rep_cnt = 0;
     TGraph::const_iterator tg_iter = tg.CBegin();
     // compute time of lhs edge in data graph
     VID_T lhs_from_tg = vid_q2g[lhs_from];
     VID_T lhs_to_tg = vid_q2g[lhs_to];
     auto lhs_from_ptr = tg_iter->FindVertex(lhs_from_tg);
     auto lhs_to_ptr = tg_iter->FindVertex(lhs_to_tg);
-    bool multiple = false;
+    // vector<TIME_T> tstp_lhs_tg_bag;
     for (auto e_iter = lhs_from_ptr->OutEdgeBegin(lhs_label, lhs_to_ptr); !e_iter.IsDone(); e_iter++) {
       // if (multiple) { LOG_S("possiblly replications!"); }
       if (e_iter->label() != lhs_label) { LOG_S("WTF? label does NOT MATCH!"); }
@@ -120,13 +120,58 @@ void write_matchX(
       attribute_ptr = e_iter->FindAttributePtr(TIME_KEY);
       ATTRIBUTE_PTR_CHECK(attribute_ptr);
       TIME_T tstp_lhs_tg = attribute_ptr->template value<int>();
+      // tstp_lhs_tg_bag.push_back(tstp_lhs_tg);
       // LOG_S("edge with tstp = ", tstp_lhs_tg);
-      outfile << pattern_name << "," << cnt << "," << vid_q2g[rhs_from] << "," << rhs_label
-              << "," << vid_q2g[rhs_to] << "," << tstp_lhs_tg + tstp_delta << std::endl;
+      // outfile << pattern_name << "," << cnt << "," << vid_q2g[rhs_from] << "," << rhs_label
+      //         << "," << vid_q2g[rhs_to] << "," << tstp_lhs_tg + tstp_delta << std::endl;
       // break;
-      multiple = true;
+
+      bool all_matched = true; // is true, if has corresponding tstp on all other edges
+      for (EID_T p_eid = 2; p_eid < pattern.CountEdge(); ++p_eid) {
+        auto e_ptr2 = pattern.FindEdge(p_eid);
+        if (e_ptr2->id() != p_eid) { LOG_S("FATAL: can not found p_eid in query graph!"); }
+        VID_T e_from = e_ptr2->src_id();
+        VID_T e_to = e_ptr2->dst_id();
+        auto e_label = e_ptr2->label();
+        attribute_ptr = e_ptr2->FindAttributePtr(TIME_KEY);
+        ATTRIBUTE_PTR_CHECK(attribute_ptr);
+        TIME_T e_tstp = attribute_ptr->template value<int>();
+
+        VID_T e_from_tg = vid_q2g[e_from];
+        VID_T e_to_tg = vid_q2g[e_to];
+        auto e_from_ptr = tg_iter->FindVertex(e_from_tg);
+        auto e_to_ptr = tg_iter->FindVertex(e_to_tg);
+
+        bool matched = false; // is true, if current edge satisfies tstp
+
+        for (auto e_iter2 = e_from_ptr->OutEdgeBegin(e_label, e_to_ptr); !e_iter2.IsDone(); e_iter2++) {
+          attribute_ptr = e_iter2->FindAttributePtr(TIME_KEY);
+          ATTRIBUTE_PTR_CHECK(attribute_ptr);
+          TIME_T e_tstp_tg = attribute_ptr->template value<int>();
+          if ((e_tstp_tg - e_tstp) == (tstp_lhs_tg - tstp_lhs)) {
+            matched = true;
+            break;
+          }
+        }
+
+        if (!matched) {
+          all_matched = false;
+          break;
+        }
+      }
+      if (all_matched) {
+        rep_cnt++;
+        outfile << pattern_name << "," << vid_q2g[rhs_from] << "," << rhs_label
+                << "," << vid_q2g[rhs_to] << "," << tstp_lhs_tg + tstp_delta << std::endl;
+      }
     }
-    cnt++;
+    if (rep_cnt == 0) {
+      LOG_S("FATAL: Did not find ANY match!");
+    } else if (rep_cnt > 1) {
+      LOG_S("Found multiple match!");
+    }
+
+    // cnt++;
   }
 }
 
