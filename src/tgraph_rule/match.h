@@ -1,11 +1,15 @@
 #ifndef MATCH_H
 #define MATCH_H
 
+
 #include "global.h"
 #include "tgraph.h"
 #include <omp.h>
 
 namespace toy {
+
+#define EXACT_MATCH
+
 /* Match order algorithm
  * @param: match vertex pair
  * @return: true/false
@@ -122,6 +126,117 @@ static bool OrderMatchAlgorithm(const MatchMap &match_map) {
   return true;
 }
 
+/* Match order exact
+ * @param: match vertex pair
+ * @return: true/false
+ * @desc: return true if edge exact match
+*/
+static bool ExactMatchAlgorithm(const MatchMap &match_map) {
+  EdgeMap edge_map;
+  std::vector<TimeQueue> time_q_set;
+  std::vector<QueryVertex> query_vertex_list;
+  std::vector<TargetVertex> target_vertex_list;
+  for (auto &iter : match_map) {
+    query_vertex_list.emplace_back(iter.first);
+    target_vertex_list.emplace_back(iter.second);
+  }
+  // get edge info
+  long cnt = 0;
+  for (int i = 0; i < query_vertex_list.size(); i++) {
+    for (int j = 0; j < query_vertex_list.size(); j++) {
+      auto &query_src_vertex_id = query_vertex_list[i]->id();
+      auto &query_dst_vertex_id = query_vertex_list[j]->id();
+      // std::cout << query_src_vertex_id << "," << query_dst_vertex_id << "\n";
+      // get query edge
+      for (auto query_edge_iter = query_vertex_list[i]->OutEdgeCBegin();
+           !query_edge_iter.IsDone(); query_edge_iter++) {
+        auto &vertex_id = query_edge_iter->dst_id();
+        if (query_dst_vertex_id == vertex_id) {
+          auto &edge_label = query_edge_iter->label();
+          auto attribute_ptr = query_edge_iter->FindAttributePtr(TIME_KEY);
+          ATTRIBUTE_PTR_CHECK(attribute_ptr);
+          TIME_T timestamp = attribute_ptr->template value<int>();
+          // needn't check order if timestamp equals 0.
+          if (timestamp == 0) continue;
+          // store edge info
+          std::vector<TIME_T> edge_info;
+          edge_info.emplace_back(timestamp);  // order in query edge
+          edge_info.emplace_back(cnt++);      // map id
+          edge_map.emplace_back(edge_info);
+          // get target edge matched with query edge
+          TimeQueue time_queue;
+          auto &target_src_vertex_id = target_vertex_list[i]->id();
+          auto &target_dst_vertex_id = target_vertex_list[j]->id();
+          for (auto target_edge_iter = target_vertex_list[i]->OutEdgeCBegin(
+                                         edge_label, target_vertex_list[j]);
+               !target_edge_iter.IsDone(); target_edge_iter++) {
+            auto attribute_ptr = target_edge_iter->FindAttributePtr(TIME_KEY);
+            ATTRIBUTE_PTR_CHECK(attribute_ptr);
+            TIME_T timestamp = attribute_ptr->template value<int>();
+            time_queue.push(timestamp);
+          }
+          time_q_set.emplace_back(time_queue);
+        }
+      }
+    }
+  }
+
+  std::sort(edge_map.begin(), edge_map.end(), time_cmp);
+  // LOG_S("edge_map.size() = ", edge_map.size());
+  // return false;
+  // check timestamps whether obey exact timestamp
+  std::list<TIME_T> target_time_base; // in descending order
+  GetIntersection(target_time_base, time_q_set[edge_map[0][1]]);
+  if (target_time_base.empty()) {
+    // LOG_S("FALSE triggered O");
+    return false;
+  }
+  for (int i = 1, same_end = 1; i < edge_map.size(); i++, same_end = i) {
+    TIME_T time_delta = (edge_map[i][0] - edge_map[0][0]);
+    std::list<TIME_T> target_time_cand;
+    for (auto time_base : target_time_base) { target_time_cand.emplace_back(time_base + time_delta); }
+
+    auto &time_queue = time_q_set[edge_map[i][1]];
+    if (time_queue.empty()) {
+      // LOG_S("FALSE triggered A");
+      return false;
+    }
+
+    GetIntersectionAndPop(target_time_cand, time_q_set[edge_map[i][1]]);
+    // if do not have same timestamp, return
+    if (target_time_cand.empty()) {
+      // LOG_S("FALSE triggered B");
+      return false;
+    }
+
+    // if order is same, judge its timestamp in graph
+    if (i + 1 < edge_map.size() && edge_map[i][0] == edge_map[i + 1][0]) {
+      // find same timestamp in graph
+      {
+        TIME_T order = edge_map[i][0];
+        while (same_end + 1 < edge_map.size() &&
+               edge_map[same_end + 1][0] == order) { same_end++; }
+        // GetIntersection(target_time_cand, time_q_set[edge_map[i][1]]);
+        for (int begin = i + 1; begin <= same_end; begin++) {
+          if (target_time_cand.empty()) break;
+          GetIntersectionAndPop(target_time_cand, time_q_set[edge_map[begin][1]]);
+        }
+      }
+    }
+    if (target_time_cand.empty()) {
+      // LOG_S("FALSE triggered C");
+      return false;
+    }
+    if (same_end > i) i = same_end;
+
+    PurgeBase(target_time_base, target_time_cand, time_delta);
+  }
+
+  return true;
+}
+
+
+
 /* Clear match result
  * @param: match result
 */
@@ -160,7 +275,7 @@ class Match {
     auto target_set = x_hash_set_;
     // do match in a graph of stream
     auto t_begin = std::chrono::steady_clock::now();
-    LOG_S("TGraph.Size()", tg.Size());
+    // LOG_S("TGraph.Size()", tg.Size());
     for (TGraph::const_iterator iter = tg.CBegin(); iter != tg.CEnd(); iter++) {
       candidate_set.clear();
       _dp_iso::InitCandidateSet<MatchSemantics::kIsomorphism>(pattern, *iter,
@@ -234,7 +349,7 @@ class Match {
       candidate_set[x_ptr].shrink_to_fit();
       // do match for each x candidate
 
-      #pragma omp parallel
+      #pragma omp parallel num_threads(1)
       {
         MatchResult partial_result;
         MatchMap match_state;
@@ -254,7 +369,7 @@ class Match {
           // match(*iter, pattern, match_result);
           size_t size_af = partial_result.size();
           // std::cout << size_af << "\n";
-          ofst++;
+          // ofst++;
           // if (size_af > size_bf) {
           //   // target_set.erase(ofst++);
           // } else {
@@ -269,7 +384,7 @@ class Match {
             to_continue = true;
           }
         } // #pragma omp for
-        
+
         for (uint ofst = 0; ofst < partial_result.size(); ++ofst) {
           #pragma omp critical
           {
@@ -402,7 +517,11 @@ class MatchWithOrder : public Match {
                      MatchResult &match_result) {
     /* order match callback */
     auto match_callback = [&match_result](const MatchMap & match_map) {
+#ifdef EXACT_MATCH
+      if (ExactMatchAlgorithm(match_map)) {
+#else // EXACT_MATCH
       if (OrderMatchAlgorithm(match_map)) {
+#endif // EXACT_MATCH
         match_result.emplace_back(match_map);  // match
       }
       return true;  // continue match
@@ -418,7 +537,11 @@ class MatchWithOrder : public Match {
                       MatchMap &match_state) {
     /* order match callback */
     auto match_callback = [&match_result](const MatchMap & match_map) {
+#ifdef EXACT_MATCH
+      if (ExactMatchAlgorithm(match_map)) {
+#else // EXACT_MATCH
       if (OrderMatchAlgorithm(match_map)) {
+#endif // EXACT_MATCH
         match_result.emplace_back(match_map);  // match
         return false;                          // stop match
       }
@@ -454,7 +577,11 @@ class MatchWithOrderFilter : public Match {
 
     /* prune callback */
     auto prune_callback = [](const MatchMap & match_state) {
+#ifdef EXACT_MATCH
+      if (ExactMatchAlgorithm(match_state)) {
+#else // EXACT_MATCH
       if (OrderMatchAlgorithm(match_state)) {
+#endif // EXACT_MATCH
         return false;
       }
       return true;
@@ -482,7 +609,11 @@ class MatchWithOrderFilter : public Match {
 
     /* prune callback */
     auto prune_callback = [](const MatchMap & match_state) {
+#ifdef EXACT_MATCH
+      if (ExactMatchAlgorithm(match_state)) {
+#else // EXACT_MATCH
       if (OrderMatchAlgorithm(match_state)) {
+#endif // EXACT_MATCH
         return false;
       }
       return true;

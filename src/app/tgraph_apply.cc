@@ -99,6 +99,10 @@ void write_matchX(
   LOG_S("writing output with format of (match_id, src, elabel, dst, time) with pattern_name: ", pattern_name);
   // uint64_t cnt = 1;
   // auto link = tg_rule.GetLink();
+
+  uint exact_match_cnt, repped_match_cnt, no_match_cnt;
+  exact_match_cnt = repped_match_cnt = no_match_cnt = 0;
+
   for (auto &match : match_rlt) {
     for (auto iter : match) {
       vid_q2g[iter.first->id()] = iter.second->id();
@@ -148,7 +152,7 @@ void write_matchX(
           attribute_ptr = e_iter2->FindAttributePtr(TIME_KEY);
           ATTRIBUTE_PTR_CHECK(attribute_ptr);
           TIME_T e_tstp_tg = attribute_ptr->template value<int>();
-          if ((e_tstp_tg - e_tstp) == (tstp_lhs_tg - tstp_lhs)) {
+          if ((e_tstp_tg - tstp_lhs_tg) == (e_tstp - tstp_lhs)) {
             matched = true;
             break;
           }
@@ -166,13 +170,22 @@ void write_matchX(
       }
     }
     if (rep_cnt == 0) {
-      LOG_S("FATAL: Did not find ANY match!");
+      // LOG_S("FATAL: Did not find ANY match!");
+      // break;
+      no_match_cnt++;
     } else if (rep_cnt > 1) {
-      LOG_S("Found multiple match!");
+      // LOG_S("Found multiple match!");
+      repped_match_cnt++;
+    } else { 
+      // LOG_S("Found exact 1 match!"); 
+      exact_match_cnt++;
     }
 
     // cnt++;
   }
+
+  LOG_S("no_match: ", no_match_cnt);
+  LOG_S("match: ", exact_match_cnt);
 }
 
 
@@ -244,13 +257,14 @@ void app_apply(Config &config, bool cal_percision = false) {
     if (cal_percision) {
       MatchResult match_rlt;
       const auto &x_ptr = rule.FindConstVertex(link.from_);
-      PrintTGR(rule);
+      // PrintTGR(rule);
 #ifdef ENABLE_OPENMP
       m_ptr->DoMatchWithXParallel(tg, rule, match_rlt);
 #else // ENABLE_OPENMP
       m_ptr->DoMatchWithX(tg, rule, match_rlt);
 #endif // ENABLE_OPENMP
       // set msg
+      LOG_S("(R) match_rlt.size() = ", match_rlt.size());
       if (worker_id_ == COORDINATOR) {
         std::unordered_set<VID_T> tmp_set;
         assemble_rlt[i][TAG_SUPP_R] = tmp_set;
@@ -279,6 +293,7 @@ void app_apply(Config &config, bool cal_percision = false) {
 #else // ENABLE_OPENMP
       m_ptr->DoMatchWithX(tg, query, match_rlt);
 #endif // ENABLE_OPENMP
+      LOG_S("(Q) match_rlt.size() = ", match_rlt.size());
       // set msg
       if (worker_id_ == COORDINATOR) {
         std::unordered_set<VID_T> tmp_set;
@@ -287,8 +302,8 @@ void app_apply(Config &config, bool cal_percision = false) {
           assemble_rlt[i][TAG_SUPP_Q].emplace(match[x_ptr]->id());
         }
         // write matches
-        // write_match(match_path[i], match_rlt);
-        write_matchX(tg, tg_rules[i], rule_rhs, match_path[i], match_rlt, config.GetPatternNameByOfst(i));
+        write_match(match_path[i], match_rlt);
+        // write_matchX(tg, tg_rules[i], rule_rhs, match_path[i], match_rlt, config.GetPatternNameByOfst(i));
       } else {
         msg.emplace_back(TAG_SUPP_Q);        // tag
         msg.emplace_back(match_rlt.size());  // size
