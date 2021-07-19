@@ -57,17 +57,16 @@ void write_match(std::string output_path, const MatchResult &match_rlt) {
 
 
 
-void write_matchX(
-  TGraph &tg, Q &pattern, LinkBase &rule_rhs,
-  std::string output_path, MatchResult &match_rlt,
-  std::string pattern_name) {
-  if (match_rlt.empty()) return;
-  // preparation: get rhs id, vtx endpoints, query name, and timestamp offset
-  if (rule_rhs.id_) { LOG_S("FATAL: LinkBase rhs with none-zero id!"); }
+void write_matchX(std::string output_path, const MatchResult &match_rlt,
+                  std::string pattern_name, Q &pattern) {
 
-  // --------------- find rhs link edge ---------------
-  auto e_ptr = pattern.FindEdge(rule_rhs.id_);
-  if (e_ptr->id() != rule_rhs.id_) { LOG_S("FATAL: can not found eid-0 in query graph!"); }
+  // --------------- write_out ---------------
+  std::ofstream outfile;
+  outfile.open(output_path.data(), std::ios_base::app);
+  LOG_S("writing output with format of (q_name, src, elabel, dst, time) with pattern_name: ", pattern_name);
+
+  auto e_ptr = pattern.FindEdge(0);
+  // if (e_ptr->id() != rule_rhs.id_) { LOG_S("FATAL: can not found eid-0 in query graph!"); }
   VID_T rhs_from = e_ptr->src_id();
   VID_T rhs_to = e_ptr->dst_id();
   auto rhs_label = e_ptr->label();
@@ -75,118 +74,254 @@ void write_matchX(
   ATTRIBUTE_PTR_CHECK(attribute_ptr);
   TIME_T tstp_rhs = attribute_ptr->template value<int>();
 
-  // --------------- find lhs link edge ---------------
-  EID_T lhs_eid = 1;
-  e_ptr = pattern.FindEdge(lhs_eid);
-  if (e_ptr->id() != lhs_eid) { LOG_S("FATAL: can not found eid-1 in query graph!"); }
-  VID_T lhs_from = e_ptr->src_id();
-  VID_T lhs_to = e_ptr->dst_id();
-  auto lhs_label = e_ptr->label();
-  attribute_ptr = e_ptr->FindAttributePtr(TIME_KEY);
-  ATTRIBUTE_PTR_CHECK(attribute_ptr);
-  TIME_T tstp_lhs = attribute_ptr->template value<int>();
-
-  TIME_T tstp_delta = tstp_rhs - tstp_lhs;
-  LOG_S("delta time:", tstp_delta);
-
-  // --------------- write_out ---------------
-  std::ofstream outfile;
-  outfile.open(output_path.data());
-  auto &match = match_rlt[0];
-  uint match_size = 0;
-  for (auto iter : match) { match_size++; }
-  std::vector<VID_T> vid_q2g(match_size);
-  LOG_S("writing output with format of (match_id, src, elabel, dst, time) with pattern_name: ", pattern_name);
-  // uint64_t cnt = 1;
-  // auto link = tg_rule.GetLink();
-
-  uint exact_match_cnt, repped_match_cnt, no_match_cnt;
-  exact_match_cnt = repped_match_cnt = no_match_cnt = 0;
-
-  for (auto &match : match_rlt) {
-    for (auto iter : match) {
-      vid_q2g[iter.first->id()] = iter.second->id();
+  for (const auto &match_map : match_rlt) {
+    EdgeMap edge_map;
+    std::vector<TimeQueue> time_q_set;
+    std::vector<QueryVertex> query_vertex_list;
+    std::vector<TargetVertex> target_vertex_list;
+    std::map<VID_T, VID_T> match_q2tg;
+    for (auto &iter : match_map) {
+      query_vertex_list.emplace_back(iter.first);
+      target_vertex_list.emplace_back(iter.second);
+      match_q2tg[iter.first->id()] = iter.second->id();
     }
-    uint rep_cnt = 0;
-    TGraph::const_iterator tg_iter = tg.CBegin();
-    // compute time of lhs edge in data graph
-    VID_T lhs_from_tg = vid_q2g[lhs_from];
-    VID_T lhs_to_tg = vid_q2g[lhs_to];
-    auto lhs_from_ptr = tg_iter->FindVertex(lhs_from_tg);
-    auto lhs_to_ptr = tg_iter->FindVertex(lhs_to_tg);
-    // vector<TIME_T> tstp_lhs_tg_bag;
-    for (auto e_iter = lhs_from_ptr->OutEdgeBegin(lhs_label, lhs_to_ptr); !e_iter.IsDone(); e_iter++) {
-      // if (multiple) { LOG_S("possiblly replications!"); }
-      if (e_iter->label() != lhs_label) { LOG_S("WTF? label does NOT MATCH!"); }
-      if (e_iter->src_id() != lhs_from_tg) { LOG_S("WTF? src does NOT MATCH!"); }
-      if (e_iter->dst_id() != lhs_to_tg) { LOG_S("WTF? dst does NOT MATCH!"); }
-      // if (cnt < 100) { LOG_S("got edge with label: ", e_iter->label()); }
-      attribute_ptr = e_iter->FindAttributePtr(TIME_KEY);
-      ATTRIBUTE_PTR_CHECK(attribute_ptr);
-      TIME_T tstp_lhs_tg = attribute_ptr->template value<int>();
-      // tstp_lhs_tg_bag.push_back(tstp_lhs_tg);
-      // LOG_S("edge with tstp = ", tstp_lhs_tg);
-      // outfile << pattern_name << "," << cnt << "," << vid_q2g[rhs_from] << "," << rhs_label
-      //         << "," << vid_q2g[rhs_to] << "," << tstp_lhs_tg + tstp_delta << std::endl;
-      // break;
-
-      bool all_matched = true; // is true, if has corresponding tstp on all other edges
-      for (EID_T p_eid = 2; p_eid < pattern.CountEdge(); ++p_eid) {
-        auto e_ptr2 = pattern.FindEdge(p_eid);
-        if (e_ptr2->id() != p_eid) { LOG_S("FATAL: can not found p_eid in query graph!"); }
-        VID_T e_from = e_ptr2->src_id();
-        VID_T e_to = e_ptr2->dst_id();
-        auto e_label = e_ptr2->label();
-        attribute_ptr = e_ptr2->FindAttributePtr(TIME_KEY);
-        ATTRIBUTE_PTR_CHECK(attribute_ptr);
-        TIME_T e_tstp = attribute_ptr->template value<int>();
-
-        VID_T e_from_tg = vid_q2g[e_from];
-        VID_T e_to_tg = vid_q2g[e_to];
-        auto e_from_ptr = tg_iter->FindVertex(e_from_tg);
-        auto e_to_ptr = tg_iter->FindVertex(e_to_tg);
-
-        bool matched = false; // is true, if current edge satisfies tstp
-
-        for (auto e_iter2 = e_from_ptr->OutEdgeBegin(e_label, e_to_ptr); !e_iter2.IsDone(); e_iter2++) {
-          attribute_ptr = e_iter2->FindAttributePtr(TIME_KEY);
-          ATTRIBUTE_PTR_CHECK(attribute_ptr);
-          TIME_T e_tstp_tg = attribute_ptr->template value<int>();
-          if ((e_tstp_tg - tstp_lhs_tg) == (e_tstp - tstp_lhs)) {
-            matched = true;
-            break;
+    // get edge info
+    long cnt = 0;
+    for (int i = 0; i < query_vertex_list.size(); i++) {
+      for (int j = 0; j < query_vertex_list.size(); j++) {
+        auto &query_src_vertex_id = query_vertex_list[i]->id();
+        auto &query_dst_vertex_id = query_vertex_list[j]->id();
+        // std::cout << query_src_vertex_id << "," << query_dst_vertex_id << "\n";
+        // get query edge
+        for (auto query_edge_iter = query_vertex_list[i]->OutEdgeCBegin();
+             !query_edge_iter.IsDone(); query_edge_iter++) {
+          auto &vertex_id = query_edge_iter->dst_id();
+          if (query_dst_vertex_id == vertex_id) {
+            auto &edge_label = query_edge_iter->label();
+            auto attribute_ptr = query_edge_iter->FindAttributePtr(TIME_KEY);
+            ATTRIBUTE_PTR_CHECK(attribute_ptr);
+            TIME_T timestamp = attribute_ptr->template value<int>();
+            // needn't check order if timestamp equals 0.
+            if (timestamp == 0) continue;
+            // store edge info
+            std::vector<TIME_T> edge_info;
+            edge_info.emplace_back(timestamp);  // order in query edge
+            edge_info.emplace_back(cnt++);      // map id
+            edge_map.emplace_back(edge_info);
+            // get target edge matched with query edge
+            TimeQueue time_queue;
+            auto &target_src_vertex_id = target_vertex_list[i]->id();
+            auto &target_dst_vertex_id = target_vertex_list[j]->id();
+            for (auto target_edge_iter = target_vertex_list[i]->OutEdgeCBegin(
+                                           edge_label, target_vertex_list[j]);
+                 !target_edge_iter.IsDone(); target_edge_iter++) {
+              auto attribute_ptr = target_edge_iter->FindAttributePtr(TIME_KEY);
+              ATTRIBUTE_PTR_CHECK(attribute_ptr);
+              TIME_T timestamp = attribute_ptr->template value<int>();
+              time_queue.push(timestamp);
+            }
+            time_q_set.emplace_back(time_queue);
           }
         }
+      }
+    }
 
-        if (!matched) {
-          all_matched = false;
-          break;
+    std::sort(edge_map.begin(), edge_map.end(), time_cmp);
+    // LOG_S("edge_map.size() = ", edge_map.size());
+    // return false;
+    // check timestamps whether obey exact timestamp
+    std::list<TIME_T> target_time_base; // in descending order
+    GetIntersection(target_time_base, time_q_set[edge_map[0][1]]);
+    if (target_time_base.empty()) {
+      LOG_S("FALSE triggered O");
+      // return false;
+    }
+    for (int i = 1, same_end = 1; i < edge_map.size(); i++, same_end = i) {
+      TIME_T time_delta = (edge_map[i][0] - edge_map[0][0]);
+      std::list<TIME_T> target_time_cand;
+      for (auto time_base : target_time_base) { target_time_cand.emplace_back(time_base + time_delta); }
+
+      auto &time_queue = time_q_set[edge_map[i][1]];
+      if (time_queue.empty()) {
+        LOG_S("FALSE triggered A");
+        // return false;
+      }
+
+      GetIntersectionAndPop(target_time_cand, time_q_set[edge_map[i][1]]);
+      // if do not have same timestamp, return
+      if (target_time_cand.empty()) {
+        LOG_S("FALSE triggered B");
+        // return false;
+      }
+
+      // if order is same, judge its timestamp in graph
+      if (i + 1 < edge_map.size() && edge_map[i][0] == edge_map[i + 1][0]) {
+        // find same timestamp in graph
+        {
+          TIME_T order = edge_map[i][0];
+          while (same_end + 1 < edge_map.size() &&
+                 edge_map[same_end + 1][0] == order) { same_end++; }
+          // GetIntersection(target_time_cand, time_q_set[edge_map[i][1]]);
+          for (int begin = i + 1; begin <= same_end; begin++) {
+            if (target_time_cand.empty()) break;
+            GetIntersectionAndPop(target_time_cand, time_q_set[edge_map[begin][1]]);
+          }
         }
       }
-      if (all_matched) {
-        rep_cnt++;
-        outfile << pattern_name << "," << vid_q2g[rhs_from] << "," << rhs_label
-                << "," << vid_q2g[rhs_to] << "," << tstp_lhs_tg + tstp_delta << std::endl;
+      if (target_time_cand.empty()) {
+        LOG_S("FALSE triggered C");
+        // return false;
       }
-    }
-    if (rep_cnt == 0) {
-      // LOG_S("FATAL: Did not find ANY match!");
-      // break;
-      no_match_cnt++;
-    } else if (rep_cnt > 1) {
-      // LOG_S("Found multiple match!");
-      repped_match_cnt++;
-    } else { 
-      // LOG_S("Found exact 1 match!"); 
-      exact_match_cnt++;
+      if (same_end > i) i = same_end;
+
+      PurgeBase(target_time_base, target_time_cand, time_delta);
     }
 
-    // cnt++;
+
+    for (auto tstp : target_time_base) {
+      auto final_tstp = tstp + (tstp_rhs - edge_map[0][0]);
+      outfile << pattern_name <<  "," << match_q2tg[rhs_from] << "," << rhs_label
+              << "," << match_q2tg[rhs_to] << "," << final_tstp << std::endl;
+    }
+    // return true;
   }
+  outfile.close();
 
-  LOG_S("no_match: ", no_match_cnt);
-  LOG_S("match: ", exact_match_cnt);
+  return;
 }
+
+
+
+// void write_matchX(
+//   TGraph &tg, Q &pattern, LinkBase &rule_rhs,
+//   std::string output_path, MatchResult &match_rlt,
+//   std::string pattern_name) {
+//   if (match_rlt.empty()) return;
+//   // preparation: get rhs id, vtx endpoints, query name, and timestamp offset
+//   if (rule_rhs.id_) { LOG_S("FATAL: LinkBase rhs with none-zero id!"); }
+
+//   // --------------- find rhs link edge ---------------
+//   auto e_ptr = pattern.FindEdge(rule_rhs.id_);
+//   if (e_ptr->id() != rule_rhs.id_) { LOG_S("FATAL: can not found eid-0 in query graph!"); }
+//   VID_T rhs_from = e_ptr->src_id();
+//   VID_T rhs_to = e_ptr->dst_id();
+//   auto rhs_label = e_ptr->label();
+//   auto attribute_ptr = e_ptr->FindAttributePtr(TIME_KEY);
+//   ATTRIBUTE_PTR_CHECK(attribute_ptr);
+//   TIME_T tstp_rhs = attribute_ptr->template value<int>();
+
+//   // --------------- find lhs link edge ---------------
+//   EID_T lhs_eid = 1;
+//   e_ptr = pattern.FindEdge(lhs_eid);
+//   if (e_ptr->id() != lhs_eid) { LOG_S("FATAL: can not found eid-1 in query graph!"); }
+//   VID_T lhs_from = e_ptr->src_id();
+//   VID_T lhs_to = e_ptr->dst_id();
+//   auto lhs_label = e_ptr->label();
+//   attribute_ptr = e_ptr->FindAttributePtr(TIME_KEY);
+//   ATTRIBUTE_PTR_CHECK(attribute_ptr);
+//   TIME_T tstp_lhs = attribute_ptr->template value<int>();
+
+//   TIME_T tstp_delta = tstp_rhs - tstp_lhs;
+//   LOG_S("delta time:", tstp_delta);
+
+//   // --------------- write_out ---------------
+//   std::ofstream outfile;
+//   outfile.open(output_path.data());
+//   auto &match = match_rlt[0];
+//   uint match_size = 0;
+//   for (auto iter : match) { match_size++; }
+//   std::vector<VID_T> vid_q2g(match_size);
+//   LOG_S("writing output with format of (match_id, src, elabel, dst, time) with pattern_name: ", pattern_name);
+//   // uint64_t cnt = 1;
+//   // auto link = tg_rule.GetLink();
+
+//   uint exact_match_cnt, repped_match_cnt, no_match_cnt;
+//   exact_match_cnt = repped_match_cnt = no_match_cnt = 0;
+
+//   for (auto &match : match_rlt) {
+//     for (auto iter : match) {
+//       vid_q2g[iter.first->id()] = iter.second->id();
+//     }
+//     uint rep_cnt = 0;
+//     TGraph::const_iterator tg_iter = tg.CBegin();
+//     // compute time of lhs edge in data graph
+//     VID_T lhs_from_tg = vid_q2g[lhs_from];
+//     VID_T lhs_to_tg = vid_q2g[lhs_to];
+//     auto lhs_from_ptr = tg_iter->FindVertex(lhs_from_tg);
+//     auto lhs_to_ptr = tg_iter->FindVertex(lhs_to_tg);
+//     // vector<TIME_T> tstp_lhs_tg_bag;
+//     for (auto e_iter = lhs_from_ptr->OutEdgeBegin(lhs_label, lhs_to_ptr); !e_iter.IsDone(); e_iter++) {
+//       // if (multiple) { LOG_S("possiblly replications!"); }
+//       if (e_iter->label() != lhs_label) { LOG_S("WTF? label does NOT MATCH!"); }
+//       if (e_iter->src_id() != lhs_from_tg) { LOG_S("WTF? src does NOT MATCH!"); }
+//       if (e_iter->dst_id() != lhs_to_tg) { LOG_S("WTF? dst does NOT MATCH!"); }
+//       // if (cnt < 100) { LOG_S("got edge with label: ", e_iter->label()); }
+//       attribute_ptr = e_iter->FindAttributePtr(TIME_KEY);
+//       ATTRIBUTE_PTR_CHECK(attribute_ptr);
+//       TIME_T tstp_lhs_tg = attribute_ptr->template value<int>();
+//       // tstp_lhs_tg_bag.push_back(tstp_lhs_tg);
+//       // LOG_S("edge with tstp = ", tstp_lhs_tg);
+//       // outfile << pattern_name << "," << cnt << "," << vid_q2g[rhs_from] << "," << rhs_label
+//       //         << "," << vid_q2g[rhs_to] << "," << tstp_lhs_tg + tstp_delta << std::endl;
+//       // break;
+
+//       bool all_matched = true; // is true, if has corresponding tstp on all other edges
+//       for (EID_T p_eid = 2; p_eid < pattern.CountEdge(); ++p_eid) {
+//         auto e_ptr2 = pattern.FindEdge(p_eid);
+//         if (e_ptr2->id() != p_eid) { LOG_S("FATAL: can not found p_eid in query graph!"); }
+//         VID_T e_from = e_ptr2->src_id();
+//         VID_T e_to = e_ptr2->dst_id();
+//         auto e_label = e_ptr2->label();
+//         attribute_ptr = e_ptr2->FindAttributePtr(TIME_KEY);
+//         ATTRIBUTE_PTR_CHECK(attribute_ptr);
+//         TIME_T e_tstp = attribute_ptr->template value<int>();
+
+//         VID_T e_from_tg = vid_q2g[e_from];
+//         VID_T e_to_tg = vid_q2g[e_to];
+//         auto e_from_ptr = tg_iter->FindVertex(e_from_tg);
+//         auto e_to_ptr = tg_iter->FindVertex(e_to_tg);
+
+//         bool matched = false; // is true, if current edge satisfies tstp
+
+//         for (auto e_iter2 = e_from_ptr->OutEdgeBegin(e_label, e_to_ptr); !e_iter2.IsDone(); e_iter2++) {
+//           attribute_ptr = e_iter2->FindAttributePtr(TIME_KEY);
+//           ATTRIBUTE_PTR_CHECK(attribute_ptr);
+//           TIME_T e_tstp_tg = attribute_ptr->template value<int>();
+//           if ((e_tstp_tg - tstp_lhs_tg) == (e_tstp - tstp_lhs)) {
+//             matched = true;
+//             break;
+//           }
+//         }
+
+//         if (!matched) {
+//           all_matched = false;
+//           break;
+//         }
+//       }
+//       if (all_matched) {
+//         rep_cnt++;
+//         outfile << pattern_name << "," << vid_q2g[rhs_from] << "," << rhs_label
+//                 << "," << vid_q2g[rhs_to] << "," << tstp_lhs_tg + tstp_delta << std::endl;
+//       }
+//     }
+//     if (rep_cnt == 0) {
+//       // LOG_S("FATAL: Did not find ANY match!");
+//       // break;
+//       no_match_cnt++;
+//     } else if (rep_cnt > 1) {
+//       // LOG_S("Found multiple match!");
+//       repped_match_cnt++;
+//     } else {
+//       // LOG_S("Found exact 1 match!");
+//       exact_match_cnt++;
+//     }
+
+//     // cnt++;
+//   }
+
+//   LOG_S("no_match: ", no_match_cnt);
+//   LOG_S("match: ", exact_match_cnt);
+// }
 
 
 void app_apply(Config &config, bool cal_percision = false) {
@@ -246,6 +381,10 @@ void app_apply(Config &config, bool cal_percision = false) {
   // match
   auto &tg_rules = tg_rule.GetTGRSet();
   auto match_path = config.MatchFilePathVec();
+
+  std::ofstream outfile;
+  outfile.open(match_path[0].data(), std::ios_base::trunc);
+  outfile.close();
   for (int i = 0; i < tgr_size; i++) {
     // PrintLink(link);
     LOG_S("Apply in TGR ", i + 1);
@@ -253,6 +392,7 @@ void app_apply(Config &config, bool cal_percision = false) {
     if (worker_id_ != COORDINATOR) {
       msg.emplace_back(i);  // tgrIndex
     }
+
     // cal R block
     if (cal_percision) {
       MatchResult match_rlt;
@@ -302,7 +442,7 @@ void app_apply(Config &config, bool cal_percision = false) {
           assemble_rlt[i][TAG_SUPP_Q].emplace(match[x_ptr]->id());
         }
         // write matches
-        write_match(match_path[i], match_rlt);
+        write_matchX(match_path[i], match_rlt, config.GetPatternNameByOfst(i), rule);
         // write_matchX(tg, tg_rules[i], rule_rhs, match_path[i], match_rlt, config.GetPatternNameByOfst(i));
       } else {
         msg.emplace_back(TAG_SUPP_Q);        // tag
