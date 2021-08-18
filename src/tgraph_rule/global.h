@@ -77,23 +77,23 @@ struct NewEdge {
 
 /* Some simplify */
 using DataGraph = GUNDAM::LargeGraph2<VID_T, VLABEL_T, std::string, EID_T,
-                                      ELABEL_T, std::string>;
+      ELABEL_T, std::string>;
 using TargetVertex = typename DataGraph::VertexConstPtr;
 using VertexIDType = typename DataGraph::VertexType::IDType;
 using EdgeLabelType = typename DataGraph::EdgeType::LabelType;
 using EdgePtr = typename DataGraph::EdgePtr;
 using EdgeConstPtr = typename DataGraph::EdgeConstPtr;
 using Pattern = GUNDAM::LargeGraph2<VID_T, VLABEL_T, std::string, EID_T,
-                                    ELABEL_T, std::string>;
+      ELABEL_T, std::string>;
 using Q = Pattern;
 using QueryVertex = typename Pattern::VertexConstPtr;
 using MatchMap = std::map<QueryVertex, TargetVertex>;
 using MatchResult = std::vector<MatchMap>;
 using CandidateSetContainer = std::map<QueryVertex, std::vector<TargetVertex>>;
 using EdgeMap = std::vector<std::vector<TIME_T>>;  // e in query, format:
-                                                   // (timestamp, map_id), ...
+// (timestamp, map_id), ...
 using TimeQueue =
-    std::priority_queue<TIME_T, std::vector<TIME_T>, std::greater<TIME_T>>;
+  std::priority_queue<TIME_T, std::vector<TIME_T>, std::greater<TIME_T>>;
 
 /* comparision function as time ascending */
 bool time_cmp(std::vector<TIME_T> &a, std::vector<TIME_T> &b) {
@@ -113,12 +113,12 @@ enum APP_TYPE {
 
 std::string AppTypeStr(APP_TYPE app_type) {
   switch (app_type) {
-    case DISCOVERY:
-      return "discovery";
-    case APPLY:
-      return "apply";
-    default:
-      return "unknown";
+  case DISCOVERY:
+    return "discovery";
+  case APPLY:
+    return "apply";
+  default:
+    return "unknown";
   }
 }
 
@@ -131,14 +131,14 @@ enum PARTITION_METHOD {
 
 std::string PartitonMethodStr(PARTITION_METHOD partition_method) {
   switch (partition_method) {
-    case PARTITION_BY_TIME_WINDOW_SIZE:
-      return "partition_by_time_window_size";
-    case PARTITION_BY_TIME_WINDOW_NUMBER:
-      return "partition_by_time_window_number";
-    case NO_METHOD:
-      return "no_method";
-    default:
-      return "unknown";
+  case PARTITION_BY_TIME_WINDOW_SIZE:
+    return "partition_by_time_window_size";
+  case PARTITION_BY_TIME_WINDOW_NUMBER:
+    return "partition_by_time_window_number";
+  case NO_METHOD:
+    return "no_method";
+  default:
+    return "unknown";
   }
 }
 
@@ -232,7 +232,7 @@ enum TException {
 void VERTEX_CHECK(bool f) {
   if (f == false) {
     LOG_E("Vertex Error: can't find given vid");
-    throw(TException::ParameterError);
+    throw (TException::ParameterError);
   }
 }
 
@@ -240,7 +240,7 @@ template <typename T>
 void NATURE_CHECK(T num) {
   if (num < 0) {
     LOG_E("given number < 0 is forbidden");
-    throw(TException::ParameterError);
+    throw (TException::ParameterError);
   }
 }
 
@@ -248,7 +248,7 @@ template <typename T>
 void POSITIVE_CHECK(T num) {
   if (num <= 0) {
     LOG_E("given number <= 0 is forbidden");
-    throw(TException::ParameterError);
+    throw (TException::ParameterError);
   }
 }
 
@@ -256,7 +256,7 @@ template <typename T>
 void ATTRIBUTE_PTR_CHECK(T ptr) {
   if (ptr.IsNull()) {
     LOG_E("Time attribute pointer is null!");
-    throw(TException::ParameterError);
+    throw (TException::ParameterError);
   }
 }
 
@@ -288,7 +288,54 @@ void GetIntersection(std::list<T> &inter, TimeQueue pri_queue) {
   }
 }
 
+
+template <typename T>
+void GetIntersectionAndPop(std::list<T> &inter, TimeQueue &pri_queue) {
+  // if inter is empty, add pri_queue into inter.
+  if (inter.empty()) {
+    LOG_S("FATAL! Encountered empty list in GetIntersectionAndPop()");
+  }
+  TimeQueue new_queue;
+  auto inter_iter = inter.begin();
+  while (inter_iter != inter.end() && !pri_queue.empty()) {
+    if (*inter_iter == pri_queue.top()) {
+      inter_iter++;
+      pri_queue.pop();
+    } else if (*inter_iter < pri_queue.top()) {
+      inter_iter = inter.erase(inter_iter);
+    } else {
+      new_queue.emplace(pri_queue.top());
+      pri_queue.pop();
+    }
+  }
+  while (inter_iter != inter.end()) {
+    inter_iter = inter.erase(inter_iter);
+  }
+  while (!new_queue.empty()) {
+    pri_queue.emplace(new_queue.top());
+    new_queue.pop();
+  }
+}
+
+void PurgeBase(std::list<TIME_T> &base, std::list<TIME_T> &cur, TIME_T delta) {
+  auto base_iter = base.begin();
+  auto cur_iter = cur.begin();
+  while (base_iter != base.end() && cur_iter != cur.end()) {
+    if (*base_iter + delta == *cur_iter) {
+      base_iter++; cur_iter++;
+    } else if (*base_iter + delta < *cur_iter) {
+      base_iter = base.erase(base_iter);
+    } else {
+      cur_iter++;
+    }
+  }
+  while (base_iter != base.end()) {
+    base_iter = base.erase(base_iter);
+  }
+}
+
 void RemoveLink(Q &query, const LinkBase &link) {
+  // LOG_S("removing edge with id = ", link.id_);
   query.EraseEdge(link.id_);
   /*auto vertex_ptr = query.FindConstVertex(link.to_);
   if (vertex_ptr) {
