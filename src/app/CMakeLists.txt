@@ -20,8 +20,8 @@ add_executable(multi_gar_match multi_gar_match.cc)
 #add_executable(dmine_new test_dmine_new.cpp)
 #target_link_libraries(dmine_new PRIVATE glog::glog)
 
-add_executable(dmine_pro dmine_pro.cc)
-target_link_libraries(dmine_pro PRIVATE yaml-cpp glog::glog)
+#add_executable(dmine_pro dmine_pro.cc)
+#target_link_libraries(dmine_pro PRIVATE yaml-cpp glog::glog)
 
 add_executable(dmine_origin dmine_origin.cc)
 target_link_libraries(dmine_origin PRIVATE yaml-cpp glog::glog)
@@ -32,8 +32,8 @@ target_link_libraries(dmine_algo PRIVATE yaml-cpp glog::glog)
 #add_executable(mgm mgm.cc)
 #target_link_libraries(mgm PRIVATE yaml-cpp glog::glog)
 
-add_executable(multimgm multimgm.cc)
-target_link_libraries(multimgm PRIVATE yaml-cpp glog::glog MPI::MPI_CXX)
+#add_executable(multimgm multimgm.cc)
+#target_link_libraries(multimgm PRIVATE yaml-cpp glog::glog MPI::MPI_CXX)
 
 #set(CMAKE_PREFIX_PATH "/home/sunguangzhi/libtorch")
 #find_package(Torch REQUIRED)
@@ -53,5 +53,5 @@ target_link_libraries(tgraph_apply PRIVATE yaml-cpp glog::glog MPI::MPI_CXX)
 add_executable(datagraph_information datagraph_information.cpp)
 
 
-add_executable(gmar_discover gmar_discover.cpp)
-target_link_libraries(gmar_discover PRIVATE yaml-cpp glog::glog)
+#add_executable(gmar_discover gmar_discover.cpp)
+#target_link_libraries(gmar_discover PRIVATE yaml-cpp glog::glog)

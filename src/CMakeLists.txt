@@ -21,8 +21,8 @@ add_subdirectory(graph_convert)
 
 #add_subdirectory(ecs_by_gundam)
 
-add_subdirectory(graph_package)
-add_subdirectory(gptools)
+#add_subdirectory(graph_package)
+#add_subdirectory(gptools)
 
 # 源文件列表
 aux_source_directory(. SRCS)
