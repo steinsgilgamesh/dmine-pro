@@ -156,7 +156,7 @@ class Discover {
   /* calculate support of given query */
   SIZE_T calSupp(const Q &query) {
     MatchResult match_rlt;
-    // PrintTGR(query);
+    PrintTGR(query);
     m_ptr_->DoMatchWithX(tgraph_, query, match_rlt);
     // m_ptr_->DoMatch(tgraph_, query, match_rlt);
     // PrintMatch(match_rlt);

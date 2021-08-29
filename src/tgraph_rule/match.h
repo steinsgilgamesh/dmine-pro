@@ -157,7 +157,7 @@ static bool ExactMatchAlgorithm(const MatchMap &match_map) {
           ATTRIBUTE_PTR_CHECK(attribute_ptr);
           TIME_T timestamp = attribute_ptr->template value<int>();
           // needn't check order if timestamp equals 0.
-          if (timestamp == 0) continue;
+          //if (timestamp == 0) continue;
           // store edge info
           std::vector<TIME_T> edge_info;
           edge_info.emplace_back(timestamp);  // order in query edge
@@ -180,6 +180,7 @@ static bool ExactMatchAlgorithm(const MatchMap &match_map) {
       }
     }
   }
+  if (edge_map.empty()) { LOG_S("WTF???"); }
 
   std::sort(edge_map.begin(), edge_map.end(), time_cmp);
   // LOG_S("edge_map.size() = ", edge_map.size());
