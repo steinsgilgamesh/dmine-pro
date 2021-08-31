@@ -4,11 +4,12 @@
 
 #include "global.h"
 #include "tgraph.h"
+#include "config.h"
 #include <omp.h>
 
 namespace toy {
 
-#define EXACT_MATCH
+// #define EXACT_MATCH
 
 /* Match order algorithm
  * @param: match vertex pair
@@ -180,7 +181,10 @@ static bool ExactMatchAlgorithm(const MatchMap &match_map) {
       }
     }
   }
-  if (edge_map.empty()) { LOG_S("WTF???"); }
+  if (edge_map.empty()) {
+    // LOG_S("encountered empty edge_map");
+    return true;
+  }
 
   std::sort(edge_map.begin(), edge_map.end(), time_cmp);
   // LOG_S("edge_map.size() = ", edge_map.size());

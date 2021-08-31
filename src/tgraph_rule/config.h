@@ -4,7 +4,10 @@
 #include "global.h"
 #include "yaml-cpp/yaml.h"
 
+
 namespace toy {
+  
+#define EXACT_MATCH
 /* Class Config
  * @desc: set and get configurations
 */
@@ -34,6 +37,7 @@ class Config {
       use_order_ = true;
       use_match_filter_ = false;
       // discovery settings
+      twindow_size_ = config["Settings"]["WindowSize"].as<uint32_t>();
       x_label_ = config["Settings"]["NodeXLabel"].as<uint32_t>();
       y_label_ = config["Settings"]["NodeYLabel"].as<uint32_t>();
       q_label_ = config["Settings"]["EdgeQLabel"].as<uint32_t>();
@@ -145,6 +149,11 @@ class Config {
 
   /* Print Config Info */
   void PrintConfig() const {
+#ifdef EXACT_MATCH
+    LOG_T("EXACT_MATCH is ON");
+#else // EXACT_MATCH
+    LOG_T("EXACT_MATCH is OFF");
+#endif // EXACT_MATCH
     LOG_T("...... Config Info ......");
     LOG_T("App Name: ", AppTypeStr(app_));
     LOG_T("Graph VFile: ", graph_path_.first);
@@ -159,6 +168,7 @@ class Config {
     LOG_T("Whether Use Order: ", use_order_);
     LOG_T("Whether Use Match Filter: ", use_match_filter_);
     if (app_ == APP_TYPE::DISCOVERY) {
+      LOG_T("WindowSize: ", twindow_size_);
       LOG_T("X Label: ", x_label_);
       LOG_T("Y Label: ", y_label_);
       LOG_T("Q Label: ", q_label_);
@@ -199,6 +209,7 @@ class Config {
   }
   inline std::string OutputName() const { return output_name_; }
   inline std::string OutputPath() const { return output_path_; }
+  inline TIME_T WindowSize() const { return twindow_size_; }
   inline SIZE_T TimeWindowNumber() const { return time_window_number_; }
   inline TIME_T TimeWindowSize() const { return time_window_size_; }
   inline PARTITION_METHOD PartitionMethod() const { return partition_method_; }
@@ -229,6 +240,7 @@ class Config {
   std::string output_name_;
   std::string output_path_;
   // time window
+  TIME_T twindow_size_ = 0;
   SIZE_T time_window_number_ = 1;
   TIME_T time_window_size_ = 0;
   PARTITION_METHOD partition_method_ = NO_METHOD;

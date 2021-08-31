@@ -32,11 +32,17 @@ class TGraphRule {
     // init query
     tgr_set_.resize(1);
     auto &query = tgr_set_[0];
-    long order = link_.has_order_ ? 1 : 0;
     query.AddVertex(from, link_.from_label_);
     query.AddVertex(to, link_.to_label_);
     auto edge_pair = query.AddEdge(from, to, link_.label_, eid);
+
+#ifdef EXACT_MATCH
+    uint32_t twindow_size = config.WindowSize();
+    edge_pair.first->AddAttribute(TIME_KEY, static_cast<TIME_T>(twindow_size));
+#else // EXACT_MATCH
+    long order = link_.has_order_ ? 1 : 0;
     edge_pair.first->AddAttribute(TIME_KEY, static_cast<TIME_T>(order));
+#endif // EXACT_MATCH
 
     auto t_end = std::chrono::steady_clock::now();
     LOG_S("Load TGR Success, Time: ",
@@ -99,7 +105,7 @@ class TGraphRule {
       // LOG_S("total edges in RHS: ", cnt - 1);
     } catch (std::exception &e) {
       LOG_E("Load TGR YLiteralFile Error: ", e.what());
-      throw(TException::LoadPatternError);
+      throw (TException::LoadPatternError);
     }
   }
   void loadVEFileFromLocal(Q &query, const std::string &vfile,
@@ -130,11 +136,11 @@ class TGraphRule {
       infile.close();
     } catch (std::exception &e) {
       LOG_E("Load TGR VFile Error: ", e.what());
-      throw(TException::LoadPatternError);
+      throw (TException::LoadPatternError);
     }
     // set link q(x,y)
     auto edge_pair =
-        query.AddEdge(link_.from_, link_.to_, link_.label_, link_.id_);
+      query.AddEdge(link_.from_, link_.to_, link_.label_, link_.id_);
     edge_pair.first->AddAttribute(TIME_KEY, static_cast<TIME_T>(link_.order_));
     // load efile
     try {
@@ -160,7 +166,7 @@ class TGraphRule {
       // LOG_S("total edges in LHS: ", cnt - 1);
     } catch (std::exception &e) {
       LOG_E("Load TGR EFile Error: ", e.what());
-      throw(TException::LoadPatternError);
+      throw (TException::LoadPatternError);
     }
   }
 

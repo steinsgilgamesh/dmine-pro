@@ -10,6 +10,7 @@
 #include "config.h"
 #include "global.h"
 
+
 namespace toy {
 
 static omp_lock_t OMP_LOCK;
@@ -21,11 +22,11 @@ class Discover {
   Discover(TGraph &tg, TGraphRule &tgr, Config &config,
            std::shared_ptr<Match> m_ptr,
            std::shared_ptr<Match> m_assistant_ptr = nullptr)
-      : tgraph_(tg),
-        tgraph_rule_(tgr),
-        m_ptr_(m_ptr),
-        m_assistant_ptr_(m_assistant_ptr),
-        link_(tgr.GetLink()) {
+    : tgraph_(tg),
+      tgraph_rule_(tgr),
+      m_ptr_(m_ptr),
+      m_assistant_ptr_(m_assistant_ptr),
+      link_(tgr.GetLink()) {
     supp_threshold_ = config.SupportThreshold();
     select_k_ = config.SelectK();
     max_d_ = config.MaxD();
@@ -45,6 +46,16 @@ class Discover {
     for (int i = 0; i < thread_num; i++) {
       next_candidates_[i].reserve(candidates_max);
     }*/
+
+#ifdef EXACT_MATCH
+    LOG_T("EXACT_MATCH is ON");
+#else // EXACT_MATCH
+    LOG_T("EXACT_MATCH is OFF");
+#endif // EXACT_MATCH
+
+    twindow_size_ = config.WindowSize();
+    LOG_S("using twindow_size_", twindow_size_);
+
   }
   ~Discover() {}
 
@@ -64,8 +75,12 @@ class Discover {
     // cal |q(x,y)|
     x_query.AddVertex(link_.to_, link_.to_label_);
     auto edge_iter =
-        x_query.AddEdge(link_.from_, link_.to_, link_.label_, 1).first;
+      x_query.AddEdge(link_.from_, link_.to_, link_.label_, 1).first;
+#ifdef EXACT_MATCH
+    edge_iter->AddAttribute(TIME_KEY, static_cast<TIME_T>(twindow_size_));
+#else // EXACT_MATCH
     edge_iter->AddAttribute(TIME_KEY, static_cast<TIME_T>(0));
+#endif // EXACT_MATCH
     xyq_supp_ = calSupp(x_query);
     LOG_T("xyq_supp: ", xyq_supp_);
     if (xyq_supp_ == 0) {
@@ -76,7 +91,7 @@ class Discover {
     for (int i = 0; i <= max_d_; i++) {
       LOG_S("Expand Round ", i);
       auto t_begin_2 = std::chrono::steady_clock::now();
-#pragma omp parallel for schedule(dynamic)
+      #pragma omp parallel for schedule(dynamic)
       for (int pos = 0; pos < candidates_.size(); pos++) {
         const auto &query = candidates_[pos];  // tgr rule
         GRADE_T r_supp = 0, conf = 0;
@@ -133,8 +148,8 @@ class Discover {
       }
       sort(sort_cans.begin(), sort_cans.end(), conf_cmp);
       int snum = 2 * select_k_ < cnt
-                     ? 2 * select_k_ + (cnt - 2 * select_k_) * 0.1
-                     : 2 * select_k_;
+                 ? 2 * select_k_ + (cnt - 2 * select_k_) * 0.1
+                 : 2 * select_k_;
       candidates_.reserve(snum);
       for (auto iter = sort_cans.begin(); iter != sort_cans.end(); iter++) {
         if (snum-- == 0) break;
@@ -197,7 +212,7 @@ class Discover {
     removeLink(q_query);
     GRADE_T q_supp = calSupp(q_query);
     conf = q_supp <= r_supp ? 0 : (r_supp * (x_supp_ - xyq_supp_) * 1.0) /
-                                      ((q_supp - r_supp) * x_supp_);
+           ((q_supp - r_supp) * x_supp_);
     std::cout << "q_supp = " << q_supp << ", r_supp = " << r_supp
               << ", bf-conf = " << conf << "\n";
   }
@@ -230,7 +245,7 @@ class Discover {
     // get expand edge statistics hash table
     const auto &vlabel2vlabel_hash_table = tgraph_.VLabelVLabelHashTable();
     const auto &vlabel2vlabel_inner_hash_table =
-        tgraph_.VLabelVLabelInnerHashTable();
+      tgraph_.VLabelVLabelInnerHashTable();
     const auto &vlabel2elabel_hash_table = tgraph_.VLabelELabelHashTable();
 
     for (auto vertex_iter = query.VertexCBegin(); !vertex_iter.IsDone();
@@ -243,7 +258,7 @@ class Discover {
       if (vlabel2vlabel_hash_table.find(expand_e.expand_vlabel_) !=
           vlabel2vlabel_hash_table.end()) {
         const auto &dst_vlabel_set =
-            vlabel2vlabel_hash_table.at(expand_e.expand_vlabel_);
+          vlabel2vlabel_hash_table.at(expand_e.expand_vlabel_);
         for (auto dst_vlabel : dst_vlabel_set) {
           expand_e.next_vlabel_ = dst_vlabel;
           uint64_t v1v2hash = GetLabelHash(expand_e.expand_vlabel_, dst_vlabel);
@@ -263,7 +278,7 @@ class Discover {
       if (vlabel2vlabel_inner_hash_table.find(expand_e.expand_vlabel_) !=
           vlabel2vlabel_inner_hash_table.end()) {
         const auto &src_vlabel_set =
-            vlabel2vlabel_inner_hash_table.at(expand_e.expand_vlabel_);
+          vlabel2vlabel_inner_hash_table.at(expand_e.expand_vlabel_);
         for (auto src_vlabel : src_vlabel_set) {
           expand_e.next_vlabel_ = src_vlabel;
           uint64_t v1v2hash = GetLabelHash(src_vlabel, expand_e.expand_vlabel_);
@@ -295,20 +310,24 @@ class Discover {
       EdgePtr edge_iter = nullptr;
       if (expand_e.is_out_) {
         edge_iter = q_tmp
-                        .AddEdge(expand_e.expand_vid_, expand_e.next_vid_,
-                                 expand_e.expand_elabel_, expand_e.next_eid_)
-                        .first;
+                    .AddEdge(expand_e.expand_vid_, expand_e.next_vid_,
+                             expand_e.expand_elabel_, expand_e.next_eid_)
+                    .first;
       } else {
         edge_iter = q_tmp
-                        .AddEdge(expand_e.next_vid_, expand_e.expand_vid_,
-                                 expand_e.expand_elabel_, expand_e.next_eid_)
-                        .first;
+                    .AddEdge(expand_e.next_vid_, expand_e.expand_vid_,
+                             expand_e.expand_elabel_, expand_e.next_eid_)
+                    .first;
       }
       edge_iter->AddAttribute(TIME_KEY, static_cast<TIME_T>(0));
       // PrintTGR(q_tmp);
       if (use_order_ && expand_e.has_order_) {  // consider order
         if (calSuppByAssistantMatchPtr(q_tmp) >= supp_threshold_) {
+#ifdef EXACT_MATCH
+          expandOrderExact(next_candidates, q_tmp, edge_iter, expand_e, r_supp);
+#else // EXACT_MATCH
           expandOrder(next_candidates, q_tmp, edge_iter, expand_e, r_supp);
+#endif // EXACT_MATCH
         }
       } else {
         next_candidates.push_back({q_tmp, r_supp});
@@ -326,22 +345,26 @@ class Discover {
           EdgePtr edge_iter = nullptr;
           if (expand_e.is_out_) {
             edge_iter =
-                q_tmp
-                    .AddEdge(expand_e.expand_vid_, dst_vid,
-                             expand_e.expand_elabel_, expand_e.next_eid_)
-                    .first;
+              q_tmp
+              .AddEdge(expand_e.expand_vid_, dst_vid,
+                       expand_e.expand_elabel_, expand_e.next_eid_)
+              .first;
           } else {
             edge_iter =
-                q_tmp
-                    .AddEdge(dst_vid, expand_e.expand_vid_,
-                             expand_e.expand_elabel_, expand_e.next_eid_)
-                    .first;
+              q_tmp
+              .AddEdge(dst_vid, expand_e.expand_vid_,
+                       expand_e.expand_elabel_, expand_e.next_eid_)
+              .first;
           }
           edge_iter->AddAttribute(TIME_KEY, static_cast<TIME_T>(0));
           // PrintTGR(q_tmp);
           if (use_order_ && expand_e.has_order_) {  // consider order
             if (calSuppByAssistantMatchPtr(q_tmp) >= supp_threshold_) {
+#ifdef EXACT_MATCH
+              expandOrderExact(next_candidates, q_tmp, edge_iter, expand_e, r_supp);
+#else // EXACT_MATCH
               expandOrder(next_candidates, q_tmp, edge_iter, expand_e, r_supp);
+#endif // EXACT_MATCH
             }
           } else {
             next_candidates.push_back({q_tmp, r_supp});
@@ -367,7 +390,7 @@ class Discover {
       bool not_exist = true;
       std::unordered_set<TIME_T> order_hash;
       for (auto query_edge_iter =
-               src_vertex->OutEdgeCBegin(edge_ptr->label(), dst_vertex);
+             src_vertex->OutEdgeCBegin(edge_ptr->label(), dst_vertex);
            !query_edge_iter.IsDone(); query_edge_iter++) {
         auto query_attr_ptr = query_edge_iter->FindAttributePtr(TIME_KEY);
         ATTRIBUTE_PTR_CHECK(query_attr_ptr);
@@ -418,6 +441,77 @@ class Discover {
     next_candidates.push_back({query, r_supp});
   }
 
+
+  /* Expand Order
+  * @param: next candidates set, query, edge ptr, new edge, rule support
+  * @desc: add order in given query(rule)
+  */
+  void expandOrderExact(std::vector<std::pair<Q, GRADE_T>> &next_candidates,
+                        Q &query, EdgePtr edge_ptr, const NewEdge &expand_e,
+                        const GRADE_T r_supp) {
+    // LOG_T("expand order TGR");
+    for (int x = 0; x < twindow_size_; x++) {
+      // new edge order equals with [1, max_order]
+      edge_ptr->SetAttribute(TIME_KEY, static_cast<TIME_T>(x));
+      const auto src_vertex = edge_ptr->const_src_ptr();
+      const auto dst_vertex = edge_ptr->const_dst_ptr();
+      bool not_exist = true;
+      std::unordered_set<TIME_T> order_hash;
+      for (auto query_edge_iter =
+             src_vertex->OutEdgeCBegin(edge_ptr->label(), dst_vertex);
+           !query_edge_iter.IsDone(); query_edge_iter++) {
+        auto query_attr_ptr = query_edge_iter->FindAttributePtr(TIME_KEY);
+        ATTRIBUTE_PTR_CHECK(query_attr_ptr);
+        TIME_T query_order = query_attr_ptr->template value<int>();
+        if (order_hash.find(query_order) == order_hash.end()) {
+          order_hash.emplace(query_order);
+        } else {
+          not_exist = false;
+          break;
+        }
+      }
+      // std::cout << "######### equal order\n";
+      // PrintTGR(rule);
+      if (not_exist) {
+        next_candidates.push_back({query, r_supp});
+      }
+      // // new edge order insert in [1, max_order]
+      // Q query_tmp = query;
+      // for (auto query_edge_iter = query_tmp.EdgeBegin();
+      //      !query_edge_iter.IsDone(); query_edge_iter++) {
+      //   auto query_attr_ptr = query_edge_iter->FindAttributePtr(TIME_KEY);
+      //   ATTRIBUTE_PTR_CHECK(query_attr_ptr);
+      //   TIME_T query_order = query_attr_ptr->template value<int>();
+      //   if (query_order >= x) {
+      //     query_edge_iter->SetAttribute(TIME_KEY,
+      //                                   static_cast<TIME_T>(query_order + 1));
+      //   }
+      // }
+      // auto query_edge_iter = query_tmp.FindEdge(expand_e.next_eid_);
+      // query_edge_iter->SetAttribute(TIME_KEY, static_cast<TIME_T>(x));
+      // // std::cout << "######### insert order\n";
+      // // PrintTGR(rule_tmp);
+      // next_candidates.push_back({query_tmp, r_supp});
+    }
+    // new edge order is max_order + 1
+    // edge_ptr->SetAttribute(TIME_KEY,
+    //                        static_cast<TIME_T>(expand_e.max_order_ + 1));
+    // // if link has order, order++
+    // if (link_.has_order_) {
+    //   auto link_ptr = query.FindEdge(link_.id_);
+    //   auto link_attr_ptr = link_ptr->FindAttributePtr(TIME_KEY);
+    //   ATTRIBUTE_PTR_CHECK(link_attr_ptr);
+    //   link_ptr->SetAttribute(TIME_KEY,
+    //                          static_cast<TIME_T>(expand_e.max_order_ + 2));
+    // }
+    // // std::cout << "######### last order\n";
+    // // PrintTGR(rule);
+    // next_candidates.push_back({query, r_supp});
+  }
+
+
+
+
   /* Auto Morphism
    * @param: query1, query2
    * @return: true/false
@@ -456,8 +550,8 @@ class Discover {
    * @desc: check whether query and items in candidate list are isomorphic
   */
   bool existInCandidates(
-      const std::vector<std::pair<Q, GRADE_T>> &candidate_list,
-      const Q &query) {
+    const std::vector<std::pair<Q, GRADE_T>> &candidate_list,
+    const Q &query) {
     for (const auto &candidate : candidate_list) {
       if (autoMorphism(query, candidate.first)) {
         return true;
@@ -527,7 +621,7 @@ class Discover {
     uint64_t cnt = 1;
     for (auto iter = q.crbegin(); iter != q.crend(); iter++, cnt++) {
       std::string file_path =
-          output_path_ + DISCOVERY_PRINT_FILE_NAME + "_" + std::to_string(cnt);
+        output_path_ + DISCOVERY_PRINT_FILE_NAME + "_" + std::to_string(cnt);
       if (Access(file_path.data(), 0) != 0) {
         if (Mkdir(file_path.data()) != 0) {
           LOG_W("Create Results Dir Failure, File Dir: ", file_path);
@@ -554,7 +648,7 @@ class Discover {
                             std::to_string(cnt) + "_e.csv";
         outfile.open(efile.data());
         outfile << "edge_id:int64,source_id:int64,target_id:int64,label_id:int,"
-                   "timestamp:int64\n";
+                "timestamp:int64\n";
         for (auto e_iter = query.EdgeCBegin(); !e_iter.IsDone(); e_iter++) {
           if (e_iter->id() == link_.id_) {
             auto attribute_ptr = e_iter->FindAttributePtr(TIME_KEY);
@@ -603,6 +697,7 @@ class Discover {
   uint32_t supp_threshold_;
   uint32_t select_k_;
   uint32_t max_d_;
+  TIME_T twindow_size_;
   bool use_order_;
   // top-k queue & candidates list
   KQueue<Q> top_k_queue_;
