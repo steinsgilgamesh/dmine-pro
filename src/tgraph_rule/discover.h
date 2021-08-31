@@ -89,6 +89,9 @@ class Discover {
     }
     omp_init_lock(&OMP_LOCK);
     for (int i = 0; i <= max_d_; i++) {
+      auto t_cur = std::chrono::steady_clock::now();
+      LOG_S("Current Time: ",
+            std::chrono::duration<double>(t_cur - t_begin).count());
       LOG_S("Expand Round ", i);
       auto t_begin_2 = std::chrono::steady_clock::now();
       #pragma omp parallel for schedule(dynamic)
