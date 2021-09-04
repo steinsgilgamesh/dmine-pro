@@ -93,6 +93,7 @@ class Discover {
       LOG_S("Current Time: ",
             std::chrono::duration<double>(t_cur - t_begin).count());
       LOG_S("Expand Round ", i);
+      LOG_S("Cand Size ", candidates_.size());
       auto t_begin_2 = std::chrono::steady_clock::now();
       #pragma omp parallel for schedule(dynamic)
       for (int pos = 0; pos < candidates_.size(); pos++) {
@@ -119,6 +120,13 @@ class Discover {
             expandEdge(next_candidates_[thread_id], query, r_supp);
           }
           // LOG_T("expand edge end: ", pos);
+        }
+        if (pos % 10 == 0)
+        {
+          auto t_trunc = std::chrono::steady_clock::now();
+          auto t_est = std::chrono::duration<double>(t_trunc - t_cur).count();
+          t_est = t_est / (pos + 1.0) * candidates_.size();
+          LOG_S("Estimated final t ", std::chrono::duration<double>(t_cur - t_begin).count() + t_est);
         }
       }
       size_t cnt = 0;
